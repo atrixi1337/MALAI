@@ -10,7 +10,7 @@ import zlib
 from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -34,41 +34,52 @@ engine = AnalysisEngine()
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     """Serve the main web interface."""
-    return templates.TemplateResponse("index.html", {"request": request})
+    response = templates.TemplateResponse("index.html", {"request": request})
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 async def _extract_zip(zip_path: Path, password: str = None) -> list[Path]:
     """Extract ZIP file contents, optionally with password. Returns list of extracted file paths."""
     extracted = []
+    pwd = password.encode('utf-8') if password else None
+
     try:
-        pwd = password.encode('utf-8') if password else None
-        with zipfile.ZipFile(zip_path, 'r') as zf:
-            if password:
-                zf.setpassword(pwd)
-            for info in zf.infolist():
-                # Skip directories and macOS metadata
-                if info.is_dir() or info.filename.startswith('__MACOSX'):
-                    continue
-                # Skip files that are too large
-                if info.file_size > MAX_FILE_SIZE_BYTES:
-                    continue
-                try:
-                    data = zf.read(info.filename, pwd=pwd)
-                except (RuntimeError, zipfile.BadZipFile, zlib.error):
-                    # Wrong password or corrupt entry, skip
-                    continue
-                # Save extracted file
-                file_id = str(uuid.uuid4())[:8]
-                safe_name = Path(info.filename).name.replace("/", "_").replace("\\", "_")
-                if not safe_name:
-                    safe_name = f"{file_id}_entry"
-                out_path = UPLOAD_DIR / f"{file_id}_{safe_name}"
-                out_path.write_bytes(data)
-                extracted.append(out_path)
+        zf = zipfile.ZipFile(zip_path, 'r')
     except zipfile.BadZipFile:
         raise HTTPException(status_code=400, detail="Invalid ZIP file")
-    except RuntimeError:
-        raise HTTPException(status_code=400, detail="Wrong ZIP password or unsupported encryption")
+
+    with zf:
+        for info in zf.infolist():
+            # Skip directories and macOS metadata
+            if info.is_dir() or info.filename.startswith('__MACOSX'):
+                continue
+            # Skip files that are too large
+            if info.file_size > MAX_FILE_SIZE_BYTES:
+                continue
+            try:
+                data = zf.read(info.filename, pwd=pwd)
+            except RuntimeError as e:
+                # Wrong password — stop and tell the user
+                if 'Bad password' in str(e) or 'password' in str(e).lower():
+                    zf.close()
+                    raise HTTPException(status_code=400, detail="Wrong ZIP password")
+                # Unsupported compression or other issue — skip this entry
+                continue
+            except (zipfile.BadZipFile, zlib.error, OSError):
+                # Corrupt entry — skip
+                continue
+            # Save extracted file
+            file_id = str(uuid.uuid4())[:8]
+            safe_name = Path(info.filename).name.replace("/", "_").replace("\\", "_")
+            if not safe_name:
+                safe_name = f"{file_id}_entry"
+            out_path = UPLOAD_DIR / f"{file_id}_{safe_name}"
+            out_path.write_bytes(data)
+            extracted.append(out_path)
+
     return extracted
 
 
