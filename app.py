@@ -42,16 +42,17 @@ async def index(request: Request):
 
 
 async def _extract_zip(zip_path: Path, password: str = None) -> list[Path]:
-    """Extract ZIP file contents, optionally with password. Returns list of extracted file paths."""
+    """Extract ZIP file contents, optionally with password.
+
+    Returns list of extracted file paths. Handles plain, ZipCrypto-encrypted,
+    and AES-encrypted (WinZip/7-Zip) ZIPs. Falls back to stdlib zipfile when
+    pyzipper is unavailable.
+    """
     extracted = []
     pwd = password.encode('utf-8') if password else None
 
+    zf = _open_zip(zip_path)
     try:
-        zf = zipfile.ZipFile(zip_path, 'r')
-    except zipfile.BadZipFile:
-        raise HTTPException(status_code=400, detail="Invalid ZIP file")
-
-    with zf:
         for info in zf.infolist():
             # Skip directories and macOS metadata
             if info.is_dir() or info.filename.startswith('__MACOSX'):
@@ -62,11 +63,22 @@ async def _extract_zip(zip_path: Path, password: str = None) -> list[Path]:
             try:
                 data = zf.read(info.filename, pwd=pwd)
             except RuntimeError as e:
-                # Wrong password — stop and tell the user
-                if 'Bad password' in str(e) or 'password' in str(e).lower():
-                    zf.close()
+                msg = str(e).lower()
+                # Encrypted but no password supplied
+                if 'password' in msg or 'encrypted' in msg:
+                    if not password:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="ZIP is password-protected. Provide the password.",
+                        )
                     raise HTTPException(status_code=400, detail="Wrong ZIP password")
-                # Unsupported compression or other issue — skip this entry
+                # Unsupported compression (e.g. AES without pyzipper) or other issue
+                if 'compression method' in msg or 'not supported' in msg or 'aes' in msg:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="ZIP uses an unsupported encryption/compression method.",
+                    )
+                # Other runtime error — skip this entry
                 continue
             except (zipfile.BadZipFile, zlib.error, OSError):
                 # Corrupt entry — skip
@@ -79,8 +91,27 @@ async def _extract_zip(zip_path: Path, password: str = None) -> list[Path]:
             out_path = UPLOAD_DIR / f"{file_id}_{safe_name}"
             out_path.write_bytes(data)
             extracted.append(out_path)
+    finally:
+        zf.close()
 
     return extracted
+
+
+def _open_zip(zip_path: Path):
+    """Open a ZIP, preferring pyzipper (handles AES) and falling back to stdlib.
+
+    Raises HTTPException(400) for a non-ZIP file.
+    """
+    try:
+        # pyzipper is API-compatible with stdlib zipfile and adds AES support.
+        from pyzipper import AESZipFile  # type: ignore
+        return AESZipFile(zip_path, 'r')
+    except ImportError:
+        pass
+    try:
+        return zipfile.ZipFile(zip_path, 'r')
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="Invalid ZIP file")
 
 
 @app.post("/api/analyze")
