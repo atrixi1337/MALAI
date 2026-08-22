@@ -12,6 +12,7 @@ from analyzers import (
     HashAnalyzer,
     YaraAnalyzer,
     IOCExtractor,
+    VirusTotalClient,
 )
 from agents.ai_engine import AIEngine
 from config import RISK_WEIGHTS
@@ -26,7 +27,20 @@ class AnalysisEngine:
         self.hash_analyzer = HashAnalyzer()
         self.yara_analyzer = YaraAnalyzer()
         self.ioc_extractor = IOCExtractor()
+        self.vt_client = VirusTotalClient()
         self.ai_engine = AIEngine()
+
+    async def _enrich_vt(self, file_path: Path, result: dict) -> dict:
+        """Run VirusTotal enrichment: file report (+ upload) and IOC lookups."""
+        vt: dict = await self.vt_client.enrich_file(file_path, result.get("hashes", {}))
+        iocs = result.get("iocs", {})
+        if iocs:
+            vt_iocs = await self.vt_client.enrich_iocs(iocs)
+            vt["domain"] = vt_iocs.get("domain", {})
+            vt["ip_address"] = vt_iocs.get("ip_address", {})
+            vt["url"] = vt_iocs.get("url", {})
+            vt["ioc_enabled"] = vt_iocs.get("enabled", False)
+        return vt
 
     async def analyze_file(self, file_path: Path, file_name: str = None) -> dict:
         """Perform full analysis on a file."""
@@ -57,6 +71,26 @@ class AnalysisEngine:
 
             # Phase 5: IOC extraction
             result["iocs"] = self.ioc_extractor.extract(file_path)
+
+            # Phase 5b: VirusTotal enrichment (file by hash + upload-if-absent,
+            # plus domain/ip/url IOCs). Degrades gracefully if no key/quota.
+            try:
+                result["vt"] = await self._enrich_vt(file_path, result)
+            except Exception as e:
+                result["vt"] = {"enabled": self.vt_client.enabled, "status": "error", "error": str(e)}
+
+            # Phase 5c: AI adjudication of IOCs (true vs false positive),
+            # grounded in the VT enrichment above.
+            try:
+                result["ioc_assessment"] = await self.ai_engine.assess_iocs(
+                    result["iocs"], result.get("vt", {})
+                )
+            except Exception as e:
+                result["ioc_assessment"] = {
+                    "available": False,
+                    "error": str(e),
+                    "assessment": {},
+                }
 
             # Phase 6: Risk scoring
             result["risk_score"] = self._calculate_risk_score(result)

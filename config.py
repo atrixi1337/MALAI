@@ -18,6 +18,15 @@ ORCAROUTER_API_KEY = os.getenv("ORCAROUTER_API_KEY", "")
 ORCAROUTER_BASE_URL = os.getenv("ORCAROUTER_BASE_URL", "https://api.orcarouter.ai/v1")
 ORCAROUTER_MODEL = os.getenv("ORCAROUTER_MODEL", "qwen/qwen3.8-27b-free")
 
+# VirusTotal configuration
+VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
+VIRUSTOTAL_BASE_URL = os.getenv("VIRUSTOTAL_BASE_URL", "https://www.virustotal.com/api/v3")
+# If True, upload the sample to VT when no report exists for its hash (requires a
+# VT tier that permits file uploads; otherwise the lookup is hash-only).
+VIRUSTOTAL_UPLOAD_IF_ABSENT = os.getenv("VIRUSTOTAL_UPLOAD_IF_ABSENT", "true").lower() in (
+    "1", "true", "yes", "on",
+)
+
 # Analysis limits
 MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "50"))
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024

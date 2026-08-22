@@ -8,10 +8,16 @@ try:
 except ImportError:
     YaraAnalyzer = None
 
+try:
+    from .vt_client import VirusTotalClient
+except ImportError:
+    VirusTotalClient = None
+
 __all__ = [
     "StaticAnalyzer",
     "StringAnalyzer",
     "HashAnalyzer",
     "YaraAnalyzer",
     "IOCExtractor",
+    "VirusTotalClient",
 ]

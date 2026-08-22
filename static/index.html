@@ -218,6 +218,41 @@
 
         .ioc-list li:last-child { border-bottom: none; }
 
+        .ioc-verdict {
+            display: inline-block;
+            margin-left: 0.4rem;
+            padding: 0.05rem 0.45rem;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            font-family: var(--font-ui), system-ui, sans-serif;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            vertical-align: middle;
+        }
+        .ioc-true { background: rgba(239,68,68,0.18); color: #fca5a5; border: 1px solid rgba(239,68,68,0.4); }
+        .ioc-benign { background: rgba(34,197,94,0.16); color: #86efac; border: 1px solid rgba(34,197,94,0.4); }
+        .ioc-unverified { background: rgba(250,204,21,0.16); color: #fde68a; border: 1px solid rgba(250,204,21,0.4); }
+
+        .vt-stat {
+            display: inline-block;
+            padding: 0.25rem 0.7rem;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+        .vt-malicious { background: rgba(239,68,68,0.2); color: #fca5a5; }
+        .vt-clean { background: rgba(34,197,94,0.18); color: #86efac; }
+        .vt-rep {
+            display: inline-block;
+            margin-left: 0.5rem;
+            padding: 0.25rem 0.6rem;
+            border-radius: 8px;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+        .vt-tags { margin-top: 0.5rem; }
+
         .yara-match {
             background: var(--bg-tertiary);
             padding: 0.8rem;
@@ -615,13 +650,80 @@
                         <div style="margin-bottom:0.8rem">
                             <strong style="color:var(--accent);font-size:0.9rem">${type.replace(/_/g, ' ').toUpperCase()} (${items.length})</strong>
                             <ul class="ioc-list">
-                                ${items.slice(0, 20).map(i => `<li>${i}</li>`).join('')}
+                                ${items.slice(0, 20).map(i => `<li>${i}${iocVerdict(type, i)}</li>`).join('')}
                                 ${items.length > 20 ? `<li>... and ${items.length - 20} more</li>` : ''}
                             </ul>
                         </div>
                     `;
                 }
                 html += '</div>';
+            }
+
+            // IOC verdict badges (from AI adjudication) — color-code each IOC
+            const assess = (r.ioc_assessment && r.ioc_assessment.assessment) || {};
+            function iocVerdict(type, value) {
+                const a = assess[type] && assess[type][value];
+                if (!a) return '';
+                const v = a.verdict;
+                const cls = v === 'TRUE_SUSPICIOUS' ? 'ioc-true'
+                          : v === 'BENIGN' ? 'ioc-benign' : 'ioc-unverified';
+                const title = a.reason ? ` title="${a.reason.replace(/"/g, '&quot;')}"` : '';
+                return ` <span class="ioc-verdict ${cls}"${title}>${v.replace('_', ' ')}</span>`;
+            }
+
+            // VirusTotal enrichment
+            if (r.vt && r.vt.enabled) {
+                const vt = r.vt;
+                const fileRep = vt.report || null;
+                let vtHtml = `<div class="result-card"><h3>🌐 VirusTotal</h3>`;
+                if (!fileRep && vt.status === 'skipped') {
+                    vtHtml += `<p style="color:var(--text-muted)">VirusTotal skipped: ${vt.reason || 'no API key'}</p>`;
+                } else if (vt.status === 'found' || vt.status === 'uploaded') {
+                    const stats = (fileRep && fileRep.last_analysis_stats) || {};
+                    const malicious = stats.malicious || 0;
+                    const total = (stats.malicious||0)+(stats.suspicious||0)+(stats.undetected||0)+(stats.harmless||0)+(stats.timeout||0);
+                    vtHtml += `
+                        <div style="margin-bottom:0.8rem">
+                            <span class="vt-stat ${malicious>0?'vt-malicious':'vt-clean'}">
+                                ${malicious}/${total} engines flagged malicious
+                            </span>
+                            ${fileRep.reputation !== null && fileRep.reputation !== undefined ? `<span class="vt-rep">Reputation: ${fileRep.reputation}</span>` : ''}
+                            ${fileRep.popular_threat_classification ? `<span class="vt-rep">Label: ${fileRep.popular_threat_classification}</span>` : ''}
+                            ${fileRep.tags && fileRep.tags.length ? `<div class="vt-tags">${fileRep.tags.map(t=>`<span class="yara-tags">${t}</span>`).join('')}</div>` : ''}
+                        </div>
+                        ${fileRep.detections && fileRep.detections.length ? `
+                            <div style="margin-bottom:0.8rem"><strong style="color:var(--accent)">Top Detections</strong>
+                            <ul class="ioc-list">${fileRep.detections.map(d=>`<li>${d.engine}: ${d.result||'malicious'}</li>`).join('')}</ul></div>
+                        ` : ''}
+                        ${fileRep.relations && Object.keys(fileRep.relations).length ? `
+                            <div style="margin-bottom:0.8rem"><strong style="color:var(--accent)">Relations</strong>
+                            <ul class="ioc-list">${Object.entries(fileRep.relations).map(([k,v])=>`<li>${k.replace(/_/g,' ')}: ${v.length}</li>`).join('')}</ul></div>
+                        ` : ''}
+                    `;
+                } else {
+                    vtHtml += `<p style="color:var(--text-muted)">No VirusTotal report for this hash${vt.reason?` (${vt.reason})`:''}.</p>`;
+                }
+
+                // Domain / IP / URL verdicts from VT
+                const iocTypes = [['domain','domain'],['ip_address','ip_address'],['url','url']];
+                let iocLines = '';
+                for (const [label, key] of iocTypes) {
+                    const obj = vt[key] || {};
+                    const entries = Object.entries(obj).filter(([,v])=>v && v.status==='ok');
+                    if (entries.length) {
+                        iocLines += `<div style="margin-bottom:0.6rem"><strong style="color:var(--accent)">${label.replace(/_/g,' ').toUpperCase()}</strong>
+                        <ul class="ioc-list">${entries.map(([val,res])=>{
+                            const a = res.data && res.data.attributes || {};
+                            const s = a.last_analysis_stats || {};
+                            const m = s.malicious||0;
+                            const badge = m>0?'<span class="ioc-verdict ioc-true">VT '+(m)+' hits</span>':'<span class="ioc-verdict ioc-unverified">VT clean/no hits</span>';
+                            return `<li>${val} ${badge}</li>`;
+                        }).join('')}</ul></div>`;
+                    }
+                }
+                if (iocLines) vtHtml += iocLines;
+                vtHtml += '</div>';
+                html += vtHtml;
             }
 
             // AI Analysis

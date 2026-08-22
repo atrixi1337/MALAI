@@ -11,6 +11,8 @@ AI-powered malware analysis and forensic reporting tool. Upload any suspicious f
 - **📝 String Extraction** — Suspicious API calls, URLs, IPs, registry keys, PowerShell commands
 - **🏷️ YARA Scanning** — Match against malware signature rules (10+ built-in rules)
 - **🎯 IOC Extraction** — Automatically extract IPs, domains, hashes, URLs, crypto wallets, etc.
+- **🧠 AI IOC Adjudication** — OrcaRouter LLM labels each extracted IOC as TRUE_SUSPICIOUS / BENIGN / UNVERIFIED, grounded in VirusTotal data, to cut false positives
+- **🌐 VirusTotal Enrichment** — File reputation by hash (upload-if-absent), plus domain/IP/URL lookups, surfaced with detections, tags, and relations
 - **🤖 AI Analysis** — LLM-powered threat classification via OrcaRouter (supports GPT, Claude, Gemini, Qwen, and more)
 - **📊 Risk Scoring** — Composite 0–100 risk score with Critical/High/Medium/Low/Info levels
 - **🌐 Web UI** — Modern drag-and-drop interface for easy file analysis
@@ -89,6 +91,8 @@ All configuration is done via environment variables (set in `.env` or `docker-co
 | `ORCAROUTER_API_KEY` | — | Your OrcaRouter API key (required) |
 | `ORCAROUTER_BASE_URL` | `https://api.orcarouter.ai/v1` | OrcaRouter API endpoint |
 | `ORCAROUTER_MODEL` | `qwen/qwen3.8-27b-free` | LLM model to use (see [supported models](https://docs.orcarouter.ai)) |
+| `VIRUSTOTAL_API_KEY` | — | VirusTotal API key (optional; enables enrichment) |
+| `VIRUSTOTAL_UPLOAD_IF_ABSENT` | `true` | Upload the sample to VT when no report exists for its hash |
 | `MAX_FILE_SIZE_MB` | `50` | Maximum upload file size in MB |
 | `YARA_RULES_DIR` | `./rules` | Directory containing YARA rule files |
 
