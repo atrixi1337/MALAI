@@ -54,6 +54,7 @@
             max-width: 1200px;
             margin: 0 auto;
             padding: 2rem;
+            overflow: hidden;
         }
 
         /* Upload Zone */
@@ -138,6 +139,7 @@
             border-radius: 12px;
             padding: 1.5rem;
             margin-bottom: 1rem;
+            overflow: hidden;
         }
 
         .result-card h3 {
@@ -187,12 +189,15 @@
             font-family: 'Consolas', monospace;
             font-size: 0.95rem;
             word-break: break-all;
+            overflow-wrap: break-word;
         }
 
         .hash-value {
             font-family: 'Consolas', monospace;
             font-size: 0.85rem;
             color: var(--purple);
+            word-break: break-all;
+            overflow-wrap: break-word;
         }
 
         .ioc-list {
@@ -207,6 +212,8 @@
             font-size: 0.85rem;
             border-bottom: 1px solid var(--border);
             color: var(--text-secondary);
+            word-break: break-all;
+            overflow-wrap: break-word;
         }
 
         .ioc-list li:last-child { border-bottom: none; }
@@ -240,6 +247,8 @@
             border-radius: 8px;
             line-height: 1.7;
             white-space: pre-wrap;
+            word-break: break-word;
+            overflow-wrap: break-word;
             font-family: 'Segoe UI', system-ui, sans-serif;
             font-size: 0.95rem;
         }
@@ -290,6 +299,8 @@
             padding: 0.3rem 0;
             color: var(--orange);
             font-size: 0.9rem;
+            word-break: break-word;
+            overflow-wrap: break-word;
         }
 
         .anomaly-item::before {
@@ -321,6 +332,12 @@
             </div>
             <div class="upload-hint">Any file type • Max 50MB</div>
             <input type="file" id="fileInput" style="display:none" />
+        </div>
+
+        <div class="zip-password-group" id="zipPasswordGroup" style="display:none;margin-top:1rem;text-align:center;">
+            <label for="zipPassword" style="color:var(--text-secondary);font-size:0.9rem;">🔒 ZIP Password (leave empty if none):</label>
+            <input type="password" id="zipPassword" placeholder="Enter ZIP password..." 
+                   style="margin-left:0.5rem;padding:0.5rem 1rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-primary);font-size:0.9rem;width:250px;" />
         </div>
 
         <div class="btn-group">
@@ -372,10 +389,12 @@
 
         function selectFile(file) {
             selectedFile = file;
+            const isZip = file.name.toLowerCase().endsWith('.zip');
+            document.getElementById('zipPasswordGroup').style.display = isZip ? 'block' : 'none';
             dropZone.innerHTML = `
-                <div class="upload-icon">📄</div>
+                <div class="upload-icon">${isZip ? '📦' : '📄'}</div>
                 <div class="upload-text"><strong>${file.name}</strong></div>
-                <div class="upload-hint">${(file.size / 1024).toFixed(1)} KB — Ready to analyze</div>
+                <div class="upload-hint">${(file.size / 1024).toFixed(1)} KB — Ready to analyze${isZip ? ' (ZIP detected)' : ''}</div>
             `;
             analyzeBtn.disabled = false;
             reportBtn.disabled = false;
@@ -393,6 +412,10 @@
 
             const formData = new FormData();
             formData.append('file', selectedFile);
+            const zipPassword = document.getElementById('zipPassword').value;
+            if (zipPassword) {
+                formData.append('zip_password', zipPassword);
+            }
 
             try {
                 const url = mode === 'report' ? '/api/report' : '/api/analyze';
@@ -421,15 +444,53 @@
         }
 
         function displayResults(data, mode) {
-            const r = data.analysis || data;
             const resultsDiv = document.getElementById('results');
 
+            // Handle ZIP results (multiple files)
+            if (data.is_zip) {
+                let html = `<div class="result-card">
+                    <h3>📦 ZIP Analysis — ${data.file_name}</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Files Analyzed</div>
+                            <div class="info-value">${data.file_count}</div>
+                        </div>
+                    </div>
+                </div>`;
+
+                for (let i = 0; i < data.files.length; i++) {
+                    const r = data.files[i];
+                    const report = data.reports ? data.reports[i] : null;
+                    html += renderAnalysis(r, report, `File ${i + 1}`);
+                }
+
+                resultsDiv.innerHTML = html;
+                resultsDiv.style.display = 'block';
+                resultsDiv.scrollIntoView({ behavior: 'smooth' });
+                return;
+            }
+
+            const r = data.analysis || data;
+            let html = renderAnalysis(r, data.report);
+
+            resultsDiv.innerHTML = html;
+            resultsDiv.style.display = 'block';
+            resultsDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function renderAnalysis(r, report, label) {
             let html = '';
+
+            if (label) {
+                html += `<div class="result-card" style="border-left:3px solid var(--accent)">
+                    <h3>📄 ${label}: ${r.file_name}</h3>
+                </div>`;
+            }
 
             // Risk Assessment
             html += `
                 <div class="result-card">
-                    <h3>🎯 Risk Assessment</h3>
+                    <h3>🎯 Risk Assessment${label ? ' — ' + label : ''}</h3>
                     <div class="info-grid">
                         <div class="info-item">
                             <div class="info-label">Risk Level</div>
@@ -564,8 +625,8 @@
             }
 
             // AI Analysis
-            const ai = data.ai_analysis || r.ai_analysis;
-            if (ai && ai.analysis) {
+            if (r.ai_analysis && r.ai_analysis.analysis) {
+                const ai = r.ai_analysis;
                 html += `
                     <div class="result-card">
                         <h3>🤖 AI Analysis</h3>
@@ -581,19 +642,16 @@
             }
 
             // Full Report
-            if (data.report) {
+            if (report) {
                 html += `
                     <div class="result-card">
                         <h3>📋 Full Forensic Report</h3>
-                        <div class="ai-analysis">${data.report}</div>
+                        <div class="ai-analysis">${report}</div>
                     </div>
                 `;
             }
 
-            resultsDiv.innerHTML = html;
-            resultsDiv.style.display = 'block';
-            resultsDiv.scrollIntoView({ behavior: 'smooth' });
-        }
+            return html;
     </script>
 </body>
 </html>

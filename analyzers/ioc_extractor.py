@@ -20,10 +20,13 @@ class IOCExtractor:
         "domain": {
             "pattern": re.compile(
                 r"\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)"
-                r"+(?:com|net|org|info|biz|xyz|top|club|online|site|pw|cc|ru|cn|tk|ga|cf|gq|ml|work)\b",
+                r"+(?:com|net|org|info|biz|xyz|top|club|online|site|pw|ru|cn|work|gov|edu|mil|int|\n"
+                r"io|co|me|tv|cc|de|fr|uk|us|ca|au|in|jp|br|ru|nl|se|no|fi|dk|pl|cz|at|ch|be|es|it|pt|ie|nz|za|mx|ar|cl|co|pe|ve|"
+                r"pro|mobi|asia|cat|jobs|museum|coop|aero)\b",
                 re.IGNORECASE,
             ),
             "exclude": {"example.com", "localhost", "google.com"},
+            "min_length": 5,
         },
         "url": {
             "pattern": re.compile(
@@ -33,9 +36,10 @@ class IOCExtractor:
         },
         "email": {
             "pattern": re.compile(
-                r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+                r"\b[a-zA-Z0-9._%+-]{3,}@[a-zA-Z0-9.-]{2,}\.[a-zA-Z]{2,}\b"
             ),
             "exclude": set(),
+            "min_length": 7,
         },
         "file_hash_md5": {
             "pattern": re.compile(r"\b[a-fA-F0-9]{32}\b"),
@@ -59,9 +63,10 @@ class IOCExtractor:
         },
         "file_path_windows": {
             "pattern": re.compile(
-                r"[A-Za-z]:\\(?:[^\\/:*?\"<>|\r\n]+\\)*[^\\/:*?\"<>|\r\n]+"
+                r"[C-Z]:\\(?:Windows|Users|Program\\s*Files|Program\\s*Files\\s*\\(x86)|Temp|AppData|System32|SysWOW64|tmp|usr|etc|var|home)\\[^\\/:*?\"<>|\r\n]{2,}"
             ),
             "exclude": set(),
+            "min_length": 10,
         },
         "crypto_wallet": {
             "pattern": re.compile(
@@ -93,9 +98,10 @@ class IOCExtractor:
 
         for ioc_type, config in self.IOC_TYPES.items():
             matches = set()
+            min_len = config.get("min_length", 0)
             for m in config["pattern"].finditer(text):
                 value = m.group()
-                if value not in config["exclude"]:
+                if value not in config["exclude"] and len(value) >= min_len:
                     matches.add(value)
 
             result[ioc_type] = sorted(matches)
