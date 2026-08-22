@@ -639,6 +639,20 @@
                 `;
             }
 
+            // IOC verdict badges (from AI adjudication) — color-code each IOC.
+            // Declared BEFORE the IOC block so the list rendering can read it
+            // without hitting the temporal dead zone.
+            const assess = (r.ioc_assessment && r.ioc_assessment.assessment) || {};
+            function iocVerdict(type, value) {
+                const a = assess[type] && assess[type][value];
+                if (!a) return '';
+                const v = a.verdict;
+                const cls = v === 'TRUE_SUSPICIOUS' ? 'ioc-true'
+                          : v === 'BENIGN' ? 'ioc-benign' : 'ioc-unverified';
+                const title = a.reason ? ` title="${a.reason.replace(/"/g, '&quot;')}"` : '';
+                return ` <span class="ioc-verdict ${cls}"${title}>${v.replace('_', ' ')}</span>`;
+            }
+
             // IOCs
             if (r.iocs && r.iocs.summary && r.iocs.summary.total_iocs > 0) {
                 const iocs = r.iocs;
@@ -657,18 +671,6 @@
                     `;
                 }
                 html += '</div>';
-            }
-
-            // IOC verdict badges (from AI adjudication) — color-code each IOC
-            const assess = (r.ioc_assessment && r.ioc_assessment.assessment) || {};
-            function iocVerdict(type, value) {
-                const a = assess[type] && assess[type][value];
-                if (!a) return '';
-                const v = a.verdict;
-                const cls = v === 'TRUE_SUSPICIOUS' ? 'ioc-true'
-                          : v === 'BENIGN' ? 'ioc-benign' : 'ioc-unverified';
-                const title = a.reason ? ` title="${a.reason.replace(/"/g, '&quot;')}"` : '';
-                return ` <span class="ioc-verdict ${cls}"${title}>${v.replace('_', ' ')}</span>`;
             }
 
             // VirusTotal enrichment
