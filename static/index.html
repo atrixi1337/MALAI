@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MALAI - Malware Analysis AI Agent</title>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border: #30363d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --accent: #58a6ff;
+            --red: #f85149;
+            --orange: #d29922;
+            --green: #3fb950;
+            --purple: #bc8cff;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), var(--purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .tagline {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Upload Zone */
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 3rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: var(--bg-secondary);
+        }
+
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--accent);
+            background: rgba(88, 166, 255, 0.05);
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .upload-text {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+        }
+
+        .upload-text strong {
+            color: var(--accent);
+        }
+
+        .upload-hint {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+
+        /* Buttons */
+        .btn-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .btn-primary:hover { opacity: 0.9; }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover { background: var(--border); }
+
+        /* Results */
+        #results {
+            margin-top: 2rem;
+            display: none;
+        }
+
+        .result-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .result-card h3 {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            color: var(--accent);
+            font-size: 1.1rem;
+        }
+
+        .risk-badge {
+            display: inline-block;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+
+        .risk-CRITICAL { background: rgba(248, 81, 73, 0.2); color: var(--red); border: 1px solid var(--red); }
+        .risk-HIGH { background: rgba(210, 153, 34, 0.2); color: var(--orange); border: 1px solid var(--orange); }
+        .risk-MEDIUM { background: rgba(210, 153, 34, 0.15); color: #e3b341; border: 1px solid #e3b341; }
+        .risk-LOW { background: rgba(63, 185, 80, 0.2); color: var(--green); border: 1px solid var(--green); }
+        .risk-INFO { background: rgba(88, 166, 255, 0.15); color: var(--accent); border: 1px solid var(--accent); }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .info-item {
+            background: var(--bg-tertiary);
+            padding: 0.8rem;
+            border-radius: 8px;
+        }
+
+        .info-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            margin-bottom: 0.3rem;
+        }
+
+        .info-value {
+            font-family: 'Consolas', monospace;
+            font-size: 0.95rem;
+            word-break: break-all;
+        }
+
+        .hash-value {
+            font-family: 'Consolas', monospace;
+            font-size: 0.85rem;
+            color: var(--purple);
+        }
+
+        .ioc-list {
+            list-style: none;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .ioc-list li {
+            padding: 0.4rem 0.6rem;
+            font-family: monospace;
+            font-size: 0.85rem;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        .ioc-list li:last-child { border-bottom: none; }
+
+        .yara-match {
+            background: var(--bg-tertiary);
+            padding: 0.8rem;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            border-left: 3px solid var(--red);
+        }
+
+        .yara-rule-name {
+            font-weight: 700;
+            color: var(--red);
+        }
+
+        .yara-tags {
+            display: inline-block;
+            background: rgba(188, 140, 255, 0.2);
+            color: var(--purple);
+            padding: 0.1rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            margin-left: 0.5rem;
+        }
+
+        .ai-analysis {
+            background: var(--bg-tertiary);
+            padding: 1.2rem;
+            border-radius: 8px;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-size: 0.95rem;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: var(--bg-tertiary);
+            border-radius: 2px;
+            margin-top: 1rem;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-bar.active { display: block; }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--purple));
+            border-radius: 2px;
+            animation: progress 2s ease-in-out infinite;
+        }
+
+        @keyframes progress {
+            0% { width: 0%; }
+            50% { width: 70%; }
+            100% { width: 100%; }
+        }
+
+        .spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 0.5rem;
+        }
+
+        .spinner.active { display: inline-block; }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .anomaly-item {
+            padding: 0.3rem 0;
+            color: var(--orange);
+            font-size: 0.9rem;
+        }
+
+        .anomaly-item::before {
+            content: "⚠ ";
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border);
+            margin-top: 3rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">🔬 MALAI</div>
+        <div class="tagline">AI-Powered Malware Analysis Agent</div>
+    </header>
+
+    <div class="container">
+        <!-- Upload Zone -->
+        <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+            <div class="upload-icon">📁</div>
+            <div class="upload-text">
+                <strong>Click to upload</strong> or drag and drop
+            </div>
+            <div class="upload-hint">Any file type • Max 50MB</div>
+            <input type="file" id="fileInput" style="display:none" />
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-primary" id="analyzeBtn" onclick="analyzeFile('analyze')" disabled>
+                <span class="spinner" id="analyzeSpinner"></span>
+                🔍 Analyze File
+            </button>
+            <button class="btn btn-secondary" id="reportBtn" onclick="analyzeFile('report')" disabled>
+                📄 Generate Report
+            </button>
+        </div>
+
+        <div class="progress-bar" id="progressBar">
+            <div class="progress-fill"></div>
+        </div>
+
+        <!-- Results -->
+        <div id="results"></div>
+    </div>
+
+    <footer>
+        MALAI v1.0.0 — AI-Powered Malware Forensics Agent • For research & educational purposes only
+    </footer>
+
+    <script>
+        let selectedFile = null;
+
+        // File input handling
+        const fileInput = document.getElementById('fileInput');
+        const dropZone = document.getElementById('dropZone');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const reportBtn = document.getElementById('reportBtn');
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) selectFile(e.target.files[0]);
+        });
+
+        // Drag and drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) selectFile(e.dataTransfer.files[0]);
+        });
+
+        function selectFile(file) {
+            selectedFile = file;
+            dropZone.innerHTML = `
+                <div class="upload-icon">📄</div>
+                <div class="upload-text"><strong>${file.name}</strong></div>
+                <div class="upload-hint">${(file.size / 1024).toFixed(1)} KB — Ready to analyze</div>
+            `;
+            analyzeBtn.disabled = false;
+            reportBtn.disabled = false;
+        }
+
+        async function analyzeFile(mode) {
+            if (!selectedFile) return;
+
+            const btn = mode === 'analyze' ? analyzeBtn : reportBtn;
+            const spinner = document.getElementById('analyzeSpinner');
+            spinner.classList.add('active');
+            btn.disabled = true;
+            document.getElementById('progressBar').classList.add('active');
+            document.getElementById('results').style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            try {
+                const url = mode === 'report' ? '/api/report' : '/api/analyze';
+                const response = await fetch(url, { method: 'POST', body: formData });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || 'Analysis failed');
+                }
+
+                const data = await response.json();
+                displayResults(data, mode);
+            } catch (error) {
+                document.getElementById('results').innerHTML = `
+                    <div class="result-card">
+                        <h3>❌ Error</h3>
+                        <p style="color: var(--red)">${error.message}</p>
+                    </div>
+                `;
+                document.getElementById('results').style.display = 'block';
+            } finally {
+                spinner.classList.remove('active');
+                btn.disabled = false;
+                document.getElementById('progressBar').classList.remove('active');
+            }
+        }
+
+        function displayResults(data, mode) {
+            const r = data.analysis || data;
+            const resultsDiv = document.getElementById('results');
+
+            let html = '';
+
+            // Risk Assessment
+            html += `
+                <div class="result-card">
+                    <h3>🎯 Risk Assessment</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Risk Level</div>
+                            <span class="risk-badge risk-${r.risk_level}">${r.risk_level}</span>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Risk Score</div>
+                            <div class="info-value">${r.risk_score}/100</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">File</div>
+                            <div class="info-value">${r.file_name}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Analysis Time</div>
+                            <div class="info-value">${r.analysis_time_seconds}s</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Hashes
+            if (r.hashes) {
+                html += `
+                    <div class="result-card">
+                        <h3>🔐 File Hashes</h3>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <div class="info-label">MD5</div>
+                                <div class="hash-value">${r.hashes.md5}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">SHA-1</div>
+                                <div class="hash-value">${r.hashes.sha1}</div>
+                            </div>
+                            <div class="info-item" style="grid-column: span 2">
+                                <div class="info-label">SHA-256</div>
+                                <div class="hash-value">${r.hashes.sha256}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">ssdeep</div>
+                                <div class="hash-value">${r.hashes.ssdeep}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Static Analysis
+            if (r.static) {
+                const s = r.static;
+                html += `
+                    <div class="result-card">
+                        <h3>🔍 Static Analysis</h3>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <div class="info-label">File Type</div>
+                                <div class="info-value">${s.file_type}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">File Size</div>
+                                <div class="info-value">${s.file_size_human}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Entropy</div>
+                                <div class="info-value">${s.entropy}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Entropy Assessment</div>
+                                <div class="info-value" style="font-size:0.85rem">${s.entropy_assessment}</div>
+                            </div>
+                        </div>
+                        ${s.pe_info && !s.pe_info.error ? `
+                        <div class="info-grid" style="margin-top:1rem">
+                            <div class="info-item">
+                                <div class="info-label">Architecture</div>
+                                <div class="info-value">${s.pe_info.architecture} / ${s.pe_info.machine}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Sections</div>
+                                <div class="info-value">${s.pe_info.num_sections}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Timestamp</div>
+                                <div class="info-value" style="font-size:0.85rem">${s.pe_info.timestamp}</div>
+                            </div>
+                        </div>
+                        ` : ''}
+                        ${s.anomalies.length > 0 ? `
+                        <div style="margin-top:1rem">
+                            <strong style="color:var(--orange)">Anomalies:</strong>
+                            ${s.anomalies.map(a => `<div class="anomaly-item">${a}</div>`).join('')}
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
+            // YARA Matches
+            if (r.yara && r.yara.matches && r.yara.matches.length > 0) {
+                html += `
+                    <div class="result-card">
+                        <h3>🏷️ YARA Matches (${r.yara.match_count})</h3>
+                        ${r.yara.matches.map(m => `
+                            <div class="yara-match">
+                                <span class="yara-rule-name">${m.rule}</span>
+                                ${m.tags.map(t => `<span class="yara-tags">${t}</span>`).join('')}
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            // IOCs
+            if (r.iocs && r.iocs.summary && r.iocs.summary.total_iocs > 0) {
+                const iocs = r.iocs;
+                html += `<div class="result-card"><h3>🎯 Indicators of Compromise (${iocs.summary.total_iocs})</h3>`;
+
+                for (const [type, items] of Object.entries(iocs)) {
+                    if (type === 'summary' || !items || items.length === 0) continue;
+                    html += `
+                        <div style="margin-bottom:0.8rem">
+                            <strong style="color:var(--accent);font-size:0.9rem">${type.replace(/_/g, ' ').toUpperCase()} (${items.length})</strong>
+                            <ul class="ioc-list">
+                                ${items.slice(0, 20).map(i => `<li>${i}</li>`).join('')}
+                                ${items.length > 20 ? `<li>... and ${items.length - 20} more</li>` : ''}
+                            </ul>
+                        </div>
+                    `;
+                }
+                html += '</div>';
+            }
+
+            // AI Analysis
+            const ai = data.ai_analysis || r.ai_analysis;
+            if (ai && ai.analysis) {
+                html += `
+                    <div class="result-card">
+                        <h3>🤖 AI Analysis</h3>
+                        ${ai.classification && ai.classification !== 'Unknown' ? `
+                        <div style="margin-bottom:1rem">
+                            <strong>Classification:</strong> ${ai.classification}
+                            ${ai.risk_level && ai.risk_level !== 'Unknown' ? ` — <span class="risk-badge risk-${ai.risk_level}">${ai.risk_level}</span>` : ''}
+                        </div>
+                        ` : ''}
+                        <div class="ai-analysis">${ai.analysis}</div>
+                    </div>
+                `;
+            }
+
+            // Full Report
+            if (data.report) {
+                html += `
+                    <div class="result-card">
+                        <h3>📋 Full Forensic Report</h3>
+                        <div class="ai-analysis">${data.report}</div>
+                    </div>
+                `;
+            }
+
+            resultsDiv.innerHTML = html;
+            resultsDiv.style.display = 'block';
+            resultsDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>

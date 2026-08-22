@@ -1,0 +1,12 @@
+services:
+  malai:
+    build: .
+    ports:
+      - "8080:8000"
+    volumes:
+      - ./rules:/app/rules
+      - ./uploads:/app/uploads
+      - ./.env:/app/.env
+    env_file:
+      - .env
+    restart: unless-stopped
